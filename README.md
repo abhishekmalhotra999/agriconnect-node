@@ -36,6 +36,21 @@ Optional frontend mount overrides:
 - `USER_APP_BASE` (default `/`)
 - `ADMIN_UI_BASE` (default `/admin-panel`)
 
+### Hostinger Note
+
+If Hostinger shows `Unsupported framework or invalid project structure`, this repo now exposes a root Node entrypoint (`app.js`) for detection.
+
+Use these settings in Hostinger deployment:
+
+- Build command: `npm install && npm run deploy:build`
+- Start command: `npm run deploy:start`
+- Node version: `18+`
+
+If Hostinger still refuses monorepo detection in your plan/UI, deploy by one of these alternatives:
+
+- Use Hostinger VPS (manual Node process/PM2 deployment).
+- Deploy this repo on Render/Railway (works with the included root scripts).
+
 ## Development
 
 Backend (monolith dev mode):
