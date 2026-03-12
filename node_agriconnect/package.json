@@ -6,14 +6,10 @@
   "scripts": {
     "start": "node src/app.js",
     "start:mysql": "set -a && . ./.env.mysql && set +a && node src/app.js",
-    "dev": "npm run build:frontends && nodemon src/app.js",
-    "dev:mysql": "set -a && . ./.env.mysql && set +a && npm run build:frontends && nodemon src/app.js",
+    "dev": "nodemon src/app.js",
+    "dev:mysql": "set -a && . ./.env.mysql && set +a && nodemon src/app.js",
     "dev:backend": "nodemon src/app.js",
     "dev:backend:mysql": "set -a && . ./.env.mysql && set +a && nodemon src/app.js",
-    "build:frontend:user": "npm --prefix ../react_agriconnect run build -- --base=/",
-    "build:frontend:admin": "npm --prefix ./admin-panel run build -- --base=/admin-panel/",
-    "build:frontends": "npm run build:frontend:user && npm run build:frontend:admin",
-    "start:monolith": "npm run build:frontends && npm run start",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:mysql": "DB_DIALECT=mysql sequelize-cli db:migrate",
     "db:mysql:bootstrap": "DB_DIALECT=mysql node scripts/mysql_bootstrap_schema.js",
@@ -33,8 +29,7 @@
     "test:admin": "NODE_ENV=test jest --runInBand tests/admin",
     "test:admin:mysql": "set -a && . ./.env.mysql && set +a && DB_DIALECT=mysql NODE_ENV=test jest --runInBand tests/admin",
     "test:admin:watch": "NODE_ENV=test jest --watch tests/admin",
-    "qa:admin:pipeline": "bash ./scripts/qa_admin_pipeline.sh",
-    "qa:admin:e2e": "npm --prefix admin-panel run test:e2e"
+    "qa:admin:pipeline": "bash ./scripts/qa_admin_pipeline.sh"
   },
   "keywords": [],
   "author": "",

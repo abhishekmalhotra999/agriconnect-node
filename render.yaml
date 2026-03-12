@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agriconnect-monolith
+    name: agriconnect-backend
     runtime: node
     plan: starter
     buildCommand: npm install && npm run deploy:build
@@ -23,7 +23,3 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: USER_APP_BASE
-        value: /
-      - key: ADMIN_UI_BASE
-        value: /admin-panel
