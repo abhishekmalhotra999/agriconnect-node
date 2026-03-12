@@ -1,0 +1,87 @@
+{
+  "runMetadata": {
+    "runId": "admin-qa-YYYYMMDD-HHMMSS",
+    "dateUtc": "YYYY-MM-DDTHH:mm:ssZ",
+    "environment": "local|staging|production-like",
+    "backendBaseUrl": "http://localhost:3000",
+    "frontendBaseUrl": "http://localhost:5173",
+    "gitBranch": "feature/...",
+    "gitCommit": "<sha>"
+  },
+  "automation": {
+    "backendAdminTests": {
+      "status": "pass|fail|not-run",
+      "command": "npm run test:admin",
+      "summary": {
+        "suitesTotal": 0,
+        "suitesPassed": 0,
+        "testsTotal": 0,
+        "testsPassed": 0,
+        "testsFailed": 0
+      }
+    },
+    "frontendBuild": {
+      "status": "pass|fail|not-run",
+      "command": "npm --prefix admin-panel run build"
+    },
+    "liveSmoke": {
+      "status": "pass|fail|not-run",
+      "checks": [
+        { "name": "GET /up", "status": "pass|fail" },
+        { "name": "POST /admin/login", "status": "pass|fail" },
+        { "name": "GET /admin/dashboard", "status": "pass|fail" },
+        { "name": "GET /admin/courses?page=1", "status": "pass|fail" },
+        { "name": "GET /admin/users?page=1", "status": "pass|fail" },
+        { "name": "GET /admin/privacy_policies?page=1", "status": "pass|fail" }
+      ]
+    }
+  },
+  "manualUi": [
+    {
+      "area": "Login",
+      "route": "/login",
+      "status": "pass|fail|blocked|not-run",
+      "notes": ""
+    },
+    {
+      "area": "Dashboard",
+      "route": "/dashboard",
+      "status": "pass|fail|blocked|not-run",
+      "notes": ""
+    },
+    {
+      "area": "Courses",
+      "route": "/courses",
+      "status": "pass|fail|blocked|not-run",
+      "notes": ""
+    },
+    {
+      "area": "Users",
+      "route": "/users",
+      "status": "pass|fail|blocked|not-run",
+      "notes": ""
+    },
+    {
+      "area": "Privacy Policies",
+      "route": "/privacy-policies",
+      "status": "pass|fail|blocked|not-run",
+      "notes": ""
+    }
+  ],
+  "defects": [
+    {
+      "id": "BUG-###",
+      "severity": "P0|P1|P2|P3",
+      "title": "",
+      "reproSteps": "",
+      "apiOrUi": "api|ui|integration",
+      "status": "open|fixed|verified"
+    }
+  ],
+  "overall": {
+    "releaseReady": false,
+    "riskSummary": "",
+    "owner": "",
+    "signOff": ""
+  }
+}

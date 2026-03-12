@@ -1,0 +1,66 @@
+{
+  "name": "node_agriconnect",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "set -a && . ./.env.mysql && set +a && node src/app.js",
+    "dev": "set -a && . ./.env.mysql && set +a && npm run build:frontends && nodemon src/app.js",
+    "dev:backend": "set -a && . ./.env.mysql && set +a && nodemon src/app.js",
+    "build:frontend:user": "npm --prefix ../react_agriconnect run build -- --base=/",
+    "build:frontend:admin": "npm --prefix ./admin-panel run build -- --base=/admin-panel/",
+    "build:frontends": "npm run build:frontend:user && npm run build:frontend:admin",
+    "start:monolith": "npm run build:frontends && npm run start",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:mysql": "DB_DIALECT=mysql sequelize-cli db:migrate",
+    "db:mysql:bootstrap": "DB_DIALECT=mysql node scripts/mysql_bootstrap_schema.js",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:migrate:undo:mysql": "DB_DIALECT=mysql sequelize-cli db:migrate:undo",
+    "db:migrate:status": "sequelize-cli db:migrate:status",
+    "db:seed": "sequelize-cli db:seed:all",
+    "db:mysql:up": "docker compose -f docker-compose.mysql.yml up -d mysql-dev",
+    "db:mysql:down": "docker compose -f docker-compose.mysql.yml down",
+    "db:copy:pg-to-mysql": "node scripts/migrate_pg_to_mysql.js",
+    "db:seed:lms:bulk:mysql": "set -a && . ./.env.mysql && set +a && node scripts/seed_lms_bulk_courses_mysql.js",
+    "test": "NODE_ENV=test jest --runInBand",
+    "test:mysql": "set -a && . ./.env.mysql && set +a && DB_DIALECT=mysql NODE_ENV=test jest --runInBand",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "test:admin": "NODE_ENV=test jest --runInBand tests/admin",
+    "test:admin:mysql": "set -a && . ./.env.mysql && set +a && DB_DIALECT=mysql NODE_ENV=test jest --runInBand tests/admin",
+    "test:admin:watch": "NODE_ENV=test jest --watch tests/admin",
+    "qa:admin:pipeline": "bash ./scripts/qa_admin_pipeline.sh",
+    "qa:admin:e2e": "npm --prefix admin-panel run test:e2e"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "mysql2": "^3.14.3",
+    "nodemailer": "^8.0.2",
+    "pg": "^8.20.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "twilio": "^5.12.2"
+  },
+  "devDependencies": {
+    "jest": "^30.1.3",
+    "nodemon": "^3.1.14",
+    "sequelize-cli": "^6.6.5",
+    "supertest": "^7.1.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup/jest.setup.js"
+    ]
+  }
+}

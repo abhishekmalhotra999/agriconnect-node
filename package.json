@@ -1,0 +1,12 @@
+{
+  "name": "agriconnect-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix node_agriconnect run dev",
+    "start": "npm --prefix node_agriconnect run start",
+    "start:monolith": "npm --prefix node_agriconnect run start:monolith",
+    "dev:backend": "npm --prefix node_agriconnect run dev:backend",
+    "test:e2e:admin": "npm --prefix node_agriconnect/admin-panel run test:e2e",
+    "test:e2e:user": "npm --prefix react_agriconnect run test:e2e"
+  }
+}
