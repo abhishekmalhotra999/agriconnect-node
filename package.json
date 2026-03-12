@@ -1,12 +1,26 @@
 {
   "name": "agriconnect-monorepo",
   "private": true,
+  "version": "1.0.0",
+  "description": "AgriConnect monorepo deployment entry",
+  "main": "app.js",
+  "workspaces": [
+    "node_agriconnect",
+    "react_agriconnect",
+    "node_agriconnect/admin-panel"
+  ],
   "scripts": {
     "dev": "npm --prefix node_agriconnect run dev",
-    "start": "npm --prefix node_agriconnect run start",
+    "start": "node app.js",
     "start:monolith": "npm --prefix node_agriconnect run start:monolith",
     "dev:backend": "npm --prefix node_agriconnect run dev:backend",
+    "build:frontends": "npm --prefix node_agriconnect run build:frontends",
+    "deploy:build": "npm run build:frontends",
+    "deploy:start": "npm run start",
     "test:e2e:admin": "npm --prefix node_agriconnect/admin-panel run test:e2e",
     "test:e2e:user": "npm --prefix react_agriconnect run test:e2e"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

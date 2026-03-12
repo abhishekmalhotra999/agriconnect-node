@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: agriconnect-monolith
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run deploy:build
+    startCommand: npm run deploy:start
+    healthCheckPath: /up
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_DIALECT
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: USER_APP_BASE
+        value: /
+      - key: ADMIN_UI_BASE
+        value: /admin-panel
