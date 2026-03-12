@@ -7,13 +7,18 @@
   "scripts": {
     "postinstall": "npm --prefix node_agriconnect install",
     "dev": "npm --prefix node_agriconnect run dev:backend",
-    "start": "node app.js",
+    "start": "node node_agriconnect/src/app.js",
     "dev:backend": "npm --prefix node_agriconnect run dev:backend",
     "start:mysql": "npm --prefix node_agriconnect run start:mysql",
     "deploy:build": "echo 'No frontend build required for backend-only deployment'",
     "deploy:start": "npm run start",
     "db:dump:mysql": "npm --prefix node_agriconnect run db:dump:mysql",
     "db:restore:mysql": "npm --prefix node_agriconnect run db:restore:mysql"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1"
   },
   "engines": {
     "node": ">=18"
