@@ -86,6 +86,23 @@ function parseGalleryUrls(input) {
     return [];
 }
 
+function parseNotifications(value) {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+            return [];
+        }
+    }
+
+    return [];
+}
+
 async function ensurePublishAllowed(userId, status) {
     if (String(status || '').toLowerCase() !== 'published') return null;
 
@@ -160,6 +177,144 @@ router.get('/mine', requireRoles(['farmer']), async (req, res) => {
     } catch (err) {
         console.error('marketplace_products#mine error:', err);
         return res.status(500).json({ errors: err.message });
+    }
+});
+
+router.get('/incoming-orders', requireRoles(['farmer']), async (req, res) => {
+    try {
+        const [preferences] = await UserPreference.findOrCreate({
+            where: { user_id: req.appUser.id },
+            defaults: {
+                user_id: req.appUser.id,
+                saved_items: [],
+                recent_items: [],
+                notifications: [],
+                farmer_onboarding: { completed: false },
+                seller_status: 'approved',
+            },
+        });
+
+        const notifications = parseNotifications(preferences.notifications);
+        const incomingOrders = notifications
+            .filter((item) => String(item?.type || '') === 'marketplace_order_request')
+            .map((item) => {
+                const request = item?.orderRequest || {};
+                const rawStatus = String(request.rawStatus || request.status || 'new').toLowerCase();
+                const statusLabelMap = {
+                    new: 'New',
+                    accepted: 'Accepted',
+                    rejected: 'Rejected',
+                    closed: 'Closed',
+                };
+
+                return {
+                    id: String(request.id || item.id || ''),
+                    name: request.productTitle || item.title || 'Marketplace Order Request',
+                    amount: `R${Number(request.totalPrice || 0) || 0}`,
+                    quantity: Number(request.quantity || 1),
+                    image_url: request.productImageUrl || null,
+                    status: statusLabelMap[rawStatus] || 'New',
+                    raw_status: rawStatus,
+                    created_at: request.createdAt || item.createdAt || new Date().toISOString(),
+                    requester_name: request.requesterName || 'Customer',
+                    requester_phone: request.requesterPhone || '',
+                    requester_email: request.requesterEmail || '',
+                    message: request.message || '',
+                    product_id: request.productId || null,
+                    unit_price: Number(request.unitPrice || 0) || 0,
+                    total_price: Number(request.totalPrice || 0) || 0,
+                };
+            })
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        return res.json(incomingOrders);
+    } catch (err) {
+        console.error('marketplace_products#incoming_orders error:', err);
+        return res.status(500).json({ errors: err.message });
+    }
+});
+
+router.post('/:id/order-requests', requireRoles(['customer', 'farmer', 'technician']), async (req, res) => {
+    try {
+        const product = await MarketplaceProduct.findByPk(req.params.id, {
+            include: [{ model: User, as: 'farmer', attributes: ['id', 'name', 'email', 'phone'] }],
+        });
+
+        if (!product || String(product.status || '').toLowerCase() !== 'published') {
+            return res.status(404).json({ errors: 'Published product not found' });
+        }
+
+        if (String(product.farmer_user_id) === String(req.appUser.id)) {
+            return res.status(422).json({ errors: 'You cannot create an order request for your own listing' });
+        }
+
+        const quantity = Number(req.body.quantity || 1);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            return res.status(422).json({ errors: 'quantity must be greater than 0' });
+        }
+
+        const now = new Date().toISOString();
+        const requestId = `morder-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+        const requesterName = String(req.body.requester_name || req.appUser.name || 'Customer').trim();
+        const requesterPhone = String(req.body.requester_phone || req.appUser.phone || '').trim();
+        const requesterEmail = String(req.body.requester_email || req.appUser.email || '').trim();
+        const message = String(req.body.message || '').trim();
+        const unitPrice = Number(product.unit_price || 0) || 0;
+        const totalPrice = Number((unitPrice * quantity).toFixed(2));
+
+        const orderRequestPayload = {
+            id: requestId,
+            productId: product.id,
+            productTitle: product.title,
+            productImageUrl: product.main_picture_url || product.thumbnail_url || null,
+            quantity,
+            unitPrice,
+            totalPrice,
+            requesterName,
+            requesterPhone,
+            requesterEmail,
+            message,
+            status: 'new',
+            rawStatus: 'new',
+            createdAt: now,
+        };
+
+        const [sellerPreferences] = await UserPreference.findOrCreate({
+            where: { user_id: product.farmer_user_id },
+            defaults: {
+                user_id: product.farmer_user_id,
+                saved_items: [],
+                recent_items: [],
+                notifications: [],
+                farmer_onboarding: { completed: false },
+                seller_status: 'approved',
+            },
+        });
+
+        const currentNotifications = parseNotifications(sellerPreferences.notifications);
+        const nextNotifications = [
+            {
+                id: requestId,
+                type: 'marketplace_order_request',
+                title: `New order request for ${product.title}`,
+                message: `${requesterName} requested ${quantity} item(s).`,
+                read: false,
+                isRead: false,
+                createdAt: now,
+                orderRequest: orderRequestPayload,
+            },
+            ...currentNotifications,
+        ].slice(0, 500);
+
+        await sellerPreferences.update({ notifications: nextNotifications });
+
+        return res.status(201).json({
+            status: 'ok',
+            request: orderRequestPayload,
+        });
+    } catch (err) {
+        console.error('marketplace_products#create_order_request error:', err);
+        return res.status(422).json({ errors: err.message });
     }
 });
 
@@ -357,6 +512,22 @@ router.put('/:id', requireRoles(['farmer']), requireFarmerOnboardingComplete, li
         return res.json(product);
     } catch (err) {
         console.error('marketplace_products#update error:', err);
+        return res.status(422).json({ errors: err.message });
+    }
+});
+
+router.delete('/:id', requireRoles(['farmer']), async (req, res) => {
+    try {
+        const product = await MarketplaceProduct.findByPk(req.params.id);
+        if (!product) return res.status(404).json({ errors: 'Product not found' });
+        if (String(product.farmer_user_id) !== String(req.appUser.id)) {
+            return res.status(403).json({ errors: 'Forbidden: Not your product' });
+        }
+
+        await product.destroy();
+        return res.json({ message: 'Product deleted successfully' });
+    } catch (err) {
+        console.error('marketplace_products#delete error:', err);
         return res.status(422).json({ errors: err.message });
     }
 });

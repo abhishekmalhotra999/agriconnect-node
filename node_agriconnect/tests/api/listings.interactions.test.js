@@ -361,6 +361,201 @@ describe('Marketplace and service listing interactions', () => {
         expect(farmerMine.body.some((row) => String(row.id) === String(requestRes.body.id))).toBe(true);
     });
 
+    test('technician can update request status with valid transitions and invalid transitions are rejected', async () => {
+        const { user: technician, token: technicianToken } = await createUserWithRole('technician');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(technician.id, customer.id);
+
+        const listingRes = await request(app)
+            .post('/api/services/listings')
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({
+                title: 'Transition QA Service',
+                description: 'Lifecycle transition checks',
+                service_area: 'Region East',
+                is_active: true,
+            });
+
+        expect(listingRes.status).toBe(201);
+        cleanupListingIds.push(listingRes.body.id);
+
+        const requestRes = await request(app)
+            .post('/api/services/requests')
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                service_listing_id: listingRes.body.id,
+                requester_name: customer.name,
+                requester_phone: customer.phone,
+                requester_email: customer.email,
+                message: 'Please schedule a field visit.',
+            });
+
+        expect(requestRes.status).toBe(201);
+        cleanupRequestIds.push(requestRes.body.id);
+
+        const acceptRes = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/status`)
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({ status: 'accepted' });
+
+        expect(acceptRes.status).toBe(200);
+        expect(acceptRes.body.status).toBe('ok');
+        expect(acceptRes.body.request.status).toBe('accepted');
+
+        const invalidTransition = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/status`)
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({ status: 'new' });
+
+        expect(invalidTransition.status).toBe(422);
+        expect(String(invalidTransition.body.errors || '')).toMatch(/invalid transition/i);
+    });
+
+    test('technician cannot update requests for listings they do not own', async () => {
+        const { user: listingOwner, token: ownerToken } = await createUserWithRole('technician');
+        const { user: outsiderTech, token: outsiderToken } = await createUserWithRole('technician');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(listingOwner.id, outsiderTech.id, customer.id);
+
+        const listingRes = await request(app)
+            .post('/api/services/listings')
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send({
+                title: 'Ownership QA Service',
+                description: 'Ownership checks',
+                service_area: 'Region South',
+                is_active: true,
+            });
+
+        expect(listingRes.status).toBe(201);
+        cleanupListingIds.push(listingRes.body.id);
+
+        const requestRes = await request(app)
+            .post('/api/services/requests')
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                service_listing_id: listingRes.body.id,
+                requester_name: customer.name,
+                requester_phone: customer.phone,
+                requester_email: customer.email,
+                message: 'Need technician follow-up.',
+            });
+
+        expect(requestRes.status).toBe(201);
+        cleanupRequestIds.push(requestRes.body.id);
+
+        const forbidden = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/status`)
+            .set('Authorization', `Bearer ${outsiderToken}`)
+            .send({ status: 'accepted' });
+
+        expect(forbidden.status).toBe(403);
+        expect(String(forbidden.body.errors || '')).toMatch(/forbidden/i);
+    });
+
+    test('customer can cancel own request when it is new', async () => {
+        const { user: technician, token: technicianToken } = await createUserWithRole('technician');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(technician.id, customer.id);
+
+        const listingRes = await request(app)
+            .post('/api/services/listings')
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({
+                title: 'Customer Cancel QA Service',
+                description: 'Customer cancelability checks',
+                service_area: 'Region North',
+                is_active: true,
+            });
+
+        expect(listingRes.status).toBe(201);
+        cleanupListingIds.push(listingRes.body.id);
+
+        const requestRes = await request(app)
+            .post('/api/services/requests')
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                service_listing_id: listingRes.body.id,
+                requester_name: customer.name,
+                requester_phone: customer.phone,
+                requester_email: customer.email,
+                message: 'Need this service soon.',
+            });
+
+        expect(requestRes.status).toBe(201);
+        cleanupRequestIds.push(requestRes.body.id);
+
+        const cancelRes = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/cancel`)
+            .set('Authorization', `Bearer ${customerToken}`);
+
+        expect(cancelRes.status).toBe(200);
+        expect(cancelRes.body.status).toBe('ok');
+        expect(cancelRes.body.request.status).toBe('cancelled');
+    });
+
+    test('customer cannot cancel someone else request and cannot cancel progressed request', async () => {
+        const { user: technician, token: technicianToken } = await createUserWithRole('technician');
+        const { user: customerA, token: customerAToken } = await createUserWithRole('customer');
+        const { user: customerB, token: customerBToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(technician.id, customerA.id, customerB.id);
+
+        const listingRes = await request(app)
+            .post('/api/services/listings')
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({
+                title: 'Customer Cancel Guard Service',
+                description: 'Cancel guard checks',
+                service_area: 'Region West',
+                is_active: true,
+            });
+
+        expect(listingRes.status).toBe(201);
+        cleanupListingIds.push(listingRes.body.id);
+
+        const requestRes = await request(app)
+            .post('/api/services/requests')
+            .set('Authorization', `Bearer ${customerAToken}`)
+            .send({
+                service_listing_id: listingRes.body.id,
+                requester_name: customerA.name,
+                requester_phone: customerA.phone,
+                requester_email: customerA.email,
+                message: 'Request for guard checks.',
+            });
+
+        expect(requestRes.status).toBe(201);
+        cleanupRequestIds.push(requestRes.body.id);
+
+        const forbiddenCancel = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/cancel`)
+            .set('Authorization', `Bearer ${customerBToken}`);
+
+        expect(forbiddenCancel.status).toBe(403);
+        expect(String(forbiddenCancel.body.errors || '')).toMatch(/forbidden/i);
+
+        const acceptRes = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/status`)
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({ status: 'accepted' });
+
+        expect(acceptRes.status).toBe(200);
+
+        const progressRes = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/status`)
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({ status: 'in_progress' });
+
+        expect(progressRes.status).toBe(200);
+
+        const invalidCancel = await request(app)
+            .patch(`/api/services/requests/${requestRes.body.id}/cancel`)
+            .set('Authorization', `Bearer ${customerAToken}`);
+
+        expect(invalidCancel.status).toBe(422);
+        expect(String(invalidCancel.body.errors || '')).toMatch(/cannot be cancelled/i);
+    });
+
     test('marketplace review endpoint updates an existing review from same user instead of creating duplicates', async () => {
         const { user: farmer, token: farmerToken } = await createUserWithRole('farmer');
         const { user: customer, token: customerToken } = await createUserWithRole('customer');
@@ -468,5 +663,50 @@ describe('Marketplace and service listing interactions', () => {
         );
         expect(sameUserReviews.length).toBe(1);
         expect(Number(sameUserReviews[0].rating)).toBe(5);
+    });
+
+    test('customer can create marketplace order request and farmer can view incoming orders', async () => {
+        const { user: farmer, token: farmerToken } = await createUserWithRole('farmer');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(farmer.id, customer.id);
+
+        const productRes = await request(app)
+            .post('/api/marketplace/products')
+            .set('Authorization', `Bearer ${farmerToken}`)
+            .send({
+                title: 'Incoming Order Product',
+                description: 'Marketplace order flow checks',
+                unit_price: 25,
+                stock_quantity: 12,
+                status: 'published',
+            });
+
+        expect(productRes.status).toBe(201);
+        cleanupProductIds.push(productRes.body.id);
+
+        const orderReqRes = await request(app)
+            .post(`/api/marketplace/products/${productRes.body.id}/order-requests`)
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                quantity: 3,
+                message: 'Please prepare for Friday pickup.',
+            });
+
+        expect(orderReqRes.status).toBe(201);
+        expect(orderReqRes.body.status).toBe('ok');
+        expect(orderReqRes.body.request.productId).toBe(productRes.body.id);
+        expect(Number(orderReqRes.body.request.quantity)).toBe(3);
+
+        const incomingRes = await request(app)
+            .get('/api/marketplace/products/incoming-orders')
+            .set('Authorization', `Bearer ${farmerToken}`);
+
+        expect(incomingRes.status).toBe(200);
+        const matched = incomingRes.body.find(
+            (row) => String(row.product_id) === String(productRes.body.id),
+        );
+        expect(matched).toBeTruthy();
+        expect(Number(matched.quantity)).toBe(3);
+        expect(String(matched.requester_name || '')).toMatch(/customer/i);
     });
 });

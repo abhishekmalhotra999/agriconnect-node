@@ -93,4 +93,81 @@ router.get('/for-technician', requireRoles(['technician']), async (req, res) => 
     }
 });
 
+const STATUS_TRANSITIONS = {
+    new: ['accepted', 'rejected', 'in_progress', 'closed'],
+    accepted: ['in_progress', 'completed', 'resolved', 'closed', 'rejected'],
+    in_progress: ['completed', 'resolved', 'closed'],
+    completed: ['resolved', 'closed'],
+    resolved: ['closed'],
+    closed: [],
+    rejected: [],
+    cancelled: [],
+};
+
+router.patch('/:id/status', requireRoles(['technician']), async (req, res) => {
+    try {
+        const requestRecord = await ServiceRequest.findByPk(req.params.id, {
+            include: [{ model: ServiceListing, as: 'listing', attributes: ['id', 'technician_user_id'] }],
+        });
+
+        if (!requestRecord) {
+            return res.status(404).json({ errors: 'Service request not found' });
+        }
+
+        const ownerId = String(requestRecord.listing?.technician_user_id || '');
+        if (!ownerId || ownerId !== String(req.appUser.id)) {
+            return res.status(403).json({ errors: 'Forbidden: Not your service request' });
+        }
+
+        const nextStatus = String(req.body.status || '').trim().toLowerCase();
+        const currentStatus = String(requestRecord.status || 'new').trim().toLowerCase();
+
+        if (!Object.prototype.hasOwnProperty.call(STATUS_TRANSITIONS, nextStatus)) {
+            return res.status(422).json({ errors: 'Invalid status' });
+        }
+
+        const allowedNext = STATUS_TRANSITIONS[currentStatus] || [];
+        if (!allowedNext.includes(nextStatus) && nextStatus !== currentStatus) {
+            return res.status(422).json({
+                errors: `Invalid transition from ${currentStatus} to ${nextStatus}`,
+            });
+        }
+
+        requestRecord.status = nextStatus;
+        await requestRecord.save();
+
+        return res.json({ status: 'ok', request: requestRecord });
+    } catch (err) {
+        console.error('service_requests#technician_status_update error:', err);
+        return res.status(422).json({ errors: err.message });
+    }
+});
+
+router.patch('/:id/cancel', requireRoles(['customer', 'farmer']), async (req, res) => {
+    try {
+        const requestRecord = await ServiceRequest.findByPk(req.params.id);
+        if (!requestRecord) {
+            return res.status(404).json({ errors: 'Service request not found' });
+        }
+
+        if (String(requestRecord.customer_user_id || '') !== String(req.appUser.id)) {
+            return res.status(403).json({ errors: 'Forbidden: Not your service request' });
+        }
+
+        const currentStatus = String(requestRecord.status || 'new').trim().toLowerCase();
+        const cancellableStatuses = ['new', 'pending', 'accepted'];
+        if (!cancellableStatuses.includes(currentStatus)) {
+            return res.status(422).json({ errors: `Request cannot be cancelled from status ${currentStatus}` });
+        }
+
+        requestRecord.status = 'cancelled';
+        await requestRecord.save();
+
+        return res.json({ status: 'ok', request: requestRecord });
+    } catch (err) {
+        console.error('service_requests#customer_cancel error:', err);
+        return res.status(422).json({ errors: err.message });
+    }
+});
+
 module.exports = router;

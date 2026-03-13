@@ -312,4 +312,20 @@ router.put('/:id', requireRoles(['technician']), listingUpload, async (req, res)
     }
 });
 
+router.delete('/:id', requireRoles(['technician']), async (req, res) => {
+    try {
+        const listing = await ServiceListing.findByPk(req.params.id);
+        if (!listing) return res.status(404).json({ errors: 'Service listing not found' });
+        if (String(listing.technician_user_id) !== String(req.appUser.id)) {
+            return res.status(403).json({ errors: 'Forbidden: Not your listing' });
+        }
+
+        await listing.destroy();
+        return res.json({ message: 'Service listing deleted successfully' });
+    } catch (err) {
+        console.error('service_listings#delete error:', err);
+        return res.status(422).json({ errors: err.message });
+    }
+});
+
 module.exports = router;

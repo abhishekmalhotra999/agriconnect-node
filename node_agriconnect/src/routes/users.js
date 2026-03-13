@@ -196,6 +196,35 @@ router.patch('/preferences/notifications/:notificationId', async (req, res) => {
     }
 });
 
+// ─── GET /api/users/me ───
+router.get('/me', async (req, res) => {
+    try {
+        const user = await User.findByPk(req.appUser.id, {
+            include: [{ model: Profile }, { model: Role }],
+        });
+
+        if (!user) {
+            return res.status(404).json({ errors: 'User not found' });
+        }
+
+        return res.json({
+            user: {
+                id: user.id,
+                email: user.email || '',
+                phone: user.phone || '',
+                name: user.name || '',
+                accountType: user.roleName(),
+                profile: buildUserProfile(user.Profile),
+                jwtToken: encodeToken(user),
+                signInCount: user.sign_in_count,
+            },
+        });
+    } catch (err) {
+        console.error('users#me error:', err);
+        return res.status(500).json({ errors: err.message });
+    }
+});
+
 // ─── PUT /api/users/:id ───
 router.put('/:id', upload.single('file'), async (req, res) => {
     try {
