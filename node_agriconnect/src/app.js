@@ -34,6 +34,7 @@ const adminMarketplaceCategoriesRoutes = require('./routes/admin/marketplaceCate
 const adminServiceListingsRoutes = require('./routes/admin/serviceListings');
 const adminServiceCategoriesRoutes = require('./routes/admin/serviceCategories');
 const adminServiceRequestsRoutes = require('./routes/admin/serviceRequests');
+const adminNotificationsRoutes = require('./routes/admin/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -80,6 +81,7 @@ app.use('/admin/marketplace/categories', adminAuth, adminMarketplaceCategoriesRo
 app.use('/admin/services/listings', adminAuth, adminServiceListingsRoutes);
 app.use('/admin/services/categories', adminAuth, adminServiceCategoriesRoutes);
 app.use('/admin/services/requests', adminAuth, adminServiceRequestsRoutes);
+app.use('/admin/notifications', adminAuth, adminNotificationsRoutes);
 
 // ─── Start Server ───
 const startServer = async () => {

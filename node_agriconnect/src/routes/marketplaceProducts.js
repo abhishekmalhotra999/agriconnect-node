@@ -11,6 +11,53 @@ const listingUpload = upload.fields([
     { name: 'gallery_files', maxCount: 8 },
 ]);
 
+async function attachMarketplaceReviewStats(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return [];
+    }
+
+    const productIds = rows
+        .map((row) => Number(row.id || 0))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (productIds.length === 0) {
+        return rows.map((row) => ({
+            ...row.toJSON(),
+            avgRating: 0,
+            reviewCount: 0,
+        }));
+    }
+
+    const statsRows = await MarketplaceReview.findAll({
+        where: { marketplace_product_id: { [Op.in]: productIds } },
+        attributes: [
+            'marketplace_product_id',
+            [fn('COUNT', col('id')), 'reviewCount'],
+            [fn('AVG', col('rating')), 'avgRating'],
+        ],
+        group: ['marketplace_product_id'],
+        raw: true,
+    });
+
+    const statMap = statsRows.reduce((acc, row) => {
+        acc[String(row.marketplace_product_id)] = {
+            reviewCount: Number(row.reviewCount || 0),
+            avgRating: Number(Number(row.avgRating || 0).toFixed(1)),
+        };
+        return acc;
+    }, {});
+
+    return rows.map((row) => {
+        const key = String(row.id);
+        const stats = statMap[key] || { avgRating: 0, reviewCount: 0 };
+        return {
+            ...row.toJSON(),
+            avgRating: stats.avgRating,
+            reviewCount: stats.reviewCount,
+        };
+    });
+}
+
 function parseGalleryUrls(input) {
     if (!input) return [];
     if (Array.isArray(input)) {
@@ -92,7 +139,8 @@ router.get('/', async (req, res) => {
             order: [['created_at', 'DESC']],
         });
 
-        return res.json(rows);
+        const payload = await attachMarketplaceReviewStats(rows);
+        return res.json(payload);
     } catch (err) {
         console.error('marketplace_products#index error:', err);
         return res.status(500).json({ errors: err.message });
@@ -106,7 +154,9 @@ router.get('/mine', requireRoles(['farmer']), async (req, res) => {
             include: [{ model: MarketplaceCategory, as: 'category' }],
             order: [['created_at', 'DESC']],
         });
-        return res.json(rows);
+
+        const payload = await attachMarketplaceReviewStats(rows);
+        return res.json(payload);
     } catch (err) {
         console.error('marketplace_products#mine error:', err);
         return res.status(500).json({ errors: err.message });
@@ -178,14 +228,37 @@ router.post('/:id/reviews', async (req, res) => {
             return res.status(422).json({ errors: 'rating must be between 1 and 5' });
         }
 
-        const review = await MarketplaceReview.create({
-            marketplace_product_id: product.id,
-            user_id: req.appUser.id,
-            rating,
-            comment: req.body.comment || null,
+        const nextComment = typeof req.body.comment === 'string'
+            ? req.body.comment.trim().slice(0, 2000)
+            : null;
+
+        const [review, created] = await MarketplaceReview.findOrCreate({
+            where: {
+                marketplace_product_id: product.id,
+                user_id: req.appUser.id,
+            },
+            defaults: {
+                marketplace_product_id: product.id,
+                user_id: req.appUser.id,
+                rating,
+                comment: nextComment || null,
+            },
         });
 
-        return res.status(201).json(review);
+        if (!created) {
+            await review.update({
+                rating,
+                comment: nextComment || null,
+            });
+        }
+
+        return res.status(created ? 201 : 200).json({
+            ...review.toJSON(),
+            created,
+            message: created
+                ? 'Review created successfully'
+                : 'Your existing review was updated',
+        });
     } catch (err) {
         console.error('marketplace_products#reviews_create error:', err);
         return res.status(422).json({ errors: err.message });

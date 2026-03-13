@@ -32,6 +32,7 @@ describe('Admin Authorization Boundaries', () => {
             '/admin/services/listings',
             '/admin/services/categories',
             '/admin/services/requests',
+            '/admin/notifications',
         ];
 
         for (const route of routes) {
@@ -51,6 +52,7 @@ describe('Admin Authorization Boundaries', () => {
             '/admin/services/listings',
             '/admin/services/categories',
             '/admin/services/requests',
+            '/admin/notifications',
         ];
 
         for (const route of routes) {
@@ -72,6 +74,7 @@ describe('Admin Authorization Boundaries', () => {
             '/admin/services/listings',
             '/admin/services/categories',
             '/admin/services/requests',
+            '/admin/notifications',
         ];
 
         for (const route of routes) {

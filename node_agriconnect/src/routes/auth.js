@@ -204,8 +204,17 @@ router.post('/sign_up', async (req, res) => {
             return res.status(422).json({ errors: `Missing required fields: ${missingFields.join(', ')}` });
         }
 
+        // Prevent opaque Sequelize "Validation error" when another account already uses the email.
+        if (email) {
+            const normalizedEmail = String(email).trim().toLowerCase();
+            const existingEmailUser = await User.findOne({ where: { email: normalizedEmail } });
+            if (existingEmailUser && String(existingEmailUser.id) !== String(user.id)) {
+                return res.status(422).json({ errors: 'Email already in use. Please use another email or log in.' });
+            }
+            user.email = normalizedEmail;
+        }
+
         // Update user credentials
-        if (email) user.email = email;
         if (password) await user.setPassword(password);
         await user.save();
 

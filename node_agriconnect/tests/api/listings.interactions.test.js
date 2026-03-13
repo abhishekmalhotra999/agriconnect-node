@@ -7,7 +7,9 @@ const {
     Profile,
     UserPreference,
     MarketplaceProduct,
+    MarketplaceReview,
     ServiceListing,
+    ServiceReview,
     ServiceRequest,
 } = require('../../src/models');
 
@@ -79,6 +81,28 @@ describe('Marketplace and service listing interactions', () => {
             await ServiceListing.destroy({ where: { id: cleanupListingIds } });
             cleanupListingIds.length = 0;
         }
+
+        await MarketplaceReview.destroy({
+            where: {
+                comment: [
+                    'Initial marketplace review',
+                    'Updated marketplace review',
+                    'Initial service review',
+                    'Updated service review',
+                ],
+            },
+        });
+
+        await ServiceReview.destroy({
+            where: {
+                comment: [
+                    'Initial marketplace review',
+                    'Updated marketplace review',
+                    'Initial service review',
+                    'Updated service review',
+                ],
+            },
+        });
 
         if (cleanupProductIds.length) {
             await MarketplaceProduct.destroy({ where: { id: cleanupProductIds } });
@@ -335,5 +359,114 @@ describe('Marketplace and service listing interactions', () => {
 
         expect(farmerMine.status).toBe(200);
         expect(farmerMine.body.some((row) => String(row.id) === String(requestRes.body.id))).toBe(true);
+    });
+
+    test('marketplace review endpoint updates an existing review from same user instead of creating duplicates', async () => {
+        const { user: farmer, token: farmerToken } = await createUserWithRole('farmer');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(farmer.id, customer.id);
+
+        const productRes = await request(app)
+            .post('/api/marketplace/products')
+            .set('Authorization', `Bearer ${farmerToken}`)
+            .send({
+                title: 'Review Uniqueness Product',
+                description: 'Testing duplicate reviews handling',
+                unit_price: 42,
+                stock_quantity: 22,
+                status: 'published',
+            });
+
+        expect(productRes.status).toBe(201);
+        cleanupProductIds.push(productRes.body.id);
+
+        const firstReview = await request(app)
+            .post(`/api/marketplace/products/${productRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                rating: 4,
+                comment: 'Initial marketplace review',
+            });
+
+        expect(firstReview.status).toBe(201);
+        expect(firstReview.body.created).toBe(true);
+
+        const secondReview = await request(app)
+            .post(`/api/marketplace/products/${productRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                rating: 5,
+                comment: 'Updated marketplace review',
+            });
+
+        expect(secondReview.status).toBe(200);
+        expect(secondReview.body.created).toBe(false);
+        expect(Number(secondReview.body.rating)).toBe(5);
+        expect(secondReview.body.comment).toBe('Updated marketplace review');
+
+        const reviews = await request(app)
+            .get(`/api/marketplace/products/${productRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`);
+
+        expect(reviews.status).toBe(200);
+        const sameUserReviews = reviews.body.filter(
+            (row) => String(row.user_id) === String(customer.id),
+        );
+        expect(sameUserReviews.length).toBe(1);
+        expect(Number(sameUserReviews[0].rating)).toBe(5);
+    });
+
+    test('service review endpoint updates an existing review from same user instead of creating duplicates', async () => {
+        const { user: technician, token: technicianToken } = await createUserWithRole('technician');
+        const { user: customer, token: customerToken } = await createUserWithRole('customer');
+        cleanupUserIds.push(technician.id, customer.id);
+
+        const listingRes = await request(app)
+            .post('/api/services/listings')
+            .set('Authorization', `Bearer ${technicianToken}`)
+            .send({
+                title: 'Review Uniqueness Service',
+                description: 'Testing duplicate service reviews handling',
+                service_area: 'Region Central',
+                is_active: true,
+            });
+
+        expect(listingRes.status).toBe(201);
+        cleanupListingIds.push(listingRes.body.id);
+
+        const firstReview = await request(app)
+            .post(`/api/services/listings/${listingRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                rating: 3,
+                comment: 'Initial service review',
+            });
+
+        expect(firstReview.status).toBe(201);
+        expect(firstReview.body.created).toBe(true);
+
+        const secondReview = await request(app)
+            .post(`/api/services/listings/${listingRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`)
+            .send({
+                rating: 5,
+                comment: 'Updated service review',
+            });
+
+        expect(secondReview.status).toBe(200);
+        expect(secondReview.body.created).toBe(false);
+        expect(Number(secondReview.body.rating)).toBe(5);
+        expect(secondReview.body.comment).toBe('Updated service review');
+
+        const reviews = await request(app)
+            .get(`/api/services/listings/${listingRes.body.id}/reviews`)
+            .set('Authorization', `Bearer ${customerToken}`);
+
+        expect(reviews.status).toBe(200);
+        const sameUserReviews = reviews.body.filter(
+            (row) => String(row.user_id) === String(customer.id),
+        );
+        expect(sameUserReviews.length).toBe(1);
+        expect(Number(sameUserReviews[0].rating)).toBe(5);
     });
 });

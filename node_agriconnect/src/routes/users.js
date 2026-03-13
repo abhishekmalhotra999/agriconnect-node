@@ -23,6 +23,23 @@ function normalizeFarmerOnboarding(value) {
     return { completed: false };
 }
 
+function parseNotifications(value) {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+            return [];
+        }
+    }
+
+    return [];
+}
+
 // ─── Helpers ───
 const encodeToken = (user) => {
     if (user.phone) {
@@ -117,6 +134,65 @@ router.put('/preferences', async (req, res) => {
     } catch (err) {
         console.error('users#preferences_update error:', err);
         return res.status(422).json({ errors: err.message });
+    }
+});
+
+// ─── PATCH /api/users/preferences/notifications/:notificationId ───
+router.patch('/preferences/notifications/:notificationId', async (req, res) => {
+    try {
+        const notificationId = String(req.params.notificationId || '').trim();
+        if (!notificationId) {
+            return res.status(422).json({ errors: ['notificationId is required'] });
+        }
+
+        if (typeof req.body.read !== 'boolean') {
+            return res.status(422).json({ errors: ['read must be true or false'] });
+        }
+
+        const [preferences] = await UserPreference.findOrCreate({
+            where: { user_id: req.appUser.id },
+            defaults: {
+                user_id: req.appUser.id,
+                saved_items: [],
+                recent_items: [],
+                notifications: [],
+                farmer_onboarding: { completed: false },
+                seller_status: 'approved',
+            },
+        });
+
+        const currentNotifications = parseNotifications(preferences.notifications);
+        let found = false;
+
+        const nextNotifications = currentNotifications.map((item) => {
+            const id = String(item?.id || '');
+            if (id !== notificationId) {
+                return item;
+            }
+
+            found = true;
+            return {
+                ...item,
+                read: req.body.read,
+                isRead: req.body.read,
+            };
+        });
+
+        if (!found) {
+            return res.status(404).json({ errors: ['Notification not found'] });
+        }
+
+        await preferences.update({ notifications: nextNotifications });
+        const updated = nextNotifications.find((item) => String(item?.id || '') === notificationId);
+
+        return res.json({
+            status: 'ok',
+            notification: updated,
+            notifications: nextNotifications,
+        });
+    } catch (err) {
+        console.error('users#preferences_notification_update error:', err);
+        return res.status(500).json({ errors: err.message });
     }
 });
 

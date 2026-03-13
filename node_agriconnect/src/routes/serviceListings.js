@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { Op, fn, col } = require('sequelize');
 const { ServiceListing, ServiceCategory, User, ServiceReview } = require('../models');
 const { requireRoles, normalizeRole } = require('../middleware/roleAuth');
 const upload = require('../middleware/upload');
@@ -8,6 +9,53 @@ const listingUpload = upload.fields([
     { name: 'main_picture_file', maxCount: 1 },
     { name: 'gallery_files', maxCount: 8 },
 ]);
+
+async function attachServiceReviewStats(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return [];
+    }
+
+    const listingIds = rows
+        .map((row) => Number(row.id || 0))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (listingIds.length === 0) {
+        return rows.map((row) => ({
+            ...row.toJSON(),
+            avgRating: 0,
+            reviewCount: 0,
+        }));
+    }
+
+    const statsRows = await ServiceReview.findAll({
+        where: { service_listing_id: { [Op.in]: listingIds } },
+        attributes: [
+            'service_listing_id',
+            [fn('COUNT', col('id')), 'reviewCount'],
+            [fn('AVG', col('rating')), 'avgRating'],
+        ],
+        group: ['service_listing_id'],
+        raw: true,
+    });
+
+    const statMap = statsRows.reduce((acc, row) => {
+        acc[String(row.service_listing_id)] = {
+            reviewCount: Number(row.reviewCount || 0),
+            avgRating: Number(Number(row.avgRating || 0).toFixed(1)),
+        };
+        return acc;
+    }, {});
+
+    return rows.map((row) => {
+        const key = String(row.id);
+        const stats = statMap[key] || { avgRating: 0, reviewCount: 0 };
+        return {
+            ...row.toJSON(),
+            avgRating: stats.avgRating,
+            reviewCount: stats.reviewCount,
+        };
+    });
+}
 
 function parseGalleryUrls(input) {
     if (!input) return [];
@@ -53,7 +101,8 @@ router.get('/', async (req, res) => {
             order: [['created_at', 'DESC']],
         });
 
-        return res.json(rows);
+        const payload = await attachServiceReviewStats(rows);
+        return res.json(payload);
     } catch (err) {
         console.error('service_listings#index error:', err);
         return res.status(500).json({ errors: err.message });
@@ -67,7 +116,9 @@ router.get('/mine', requireRoles(['technician']), async (req, res) => {
             include: [{ model: ServiceCategory, as: 'category' }],
             order: [['created_at', 'DESC']],
         });
-        return res.json(rows);
+
+        const payload = await attachServiceReviewStats(rows);
+        return res.json(payload);
     } catch (err) {
         console.error('service_listings#mine error:', err);
         return res.status(500).json({ errors: err.message });
@@ -139,14 +190,37 @@ router.post('/:id/reviews', async (req, res) => {
             return res.status(422).json({ errors: 'rating must be between 1 and 5' });
         }
 
-        const review = await ServiceReview.create({
-            service_listing_id: listing.id,
-            user_id: req.appUser.id,
-            rating,
-            comment: req.body.comment || null,
+        const nextComment = typeof req.body.comment === 'string'
+            ? req.body.comment.trim().slice(0, 2000)
+            : null;
+
+        const [review, created] = await ServiceReview.findOrCreate({
+            where: {
+                service_listing_id: listing.id,
+                user_id: req.appUser.id,
+            },
+            defaults: {
+                service_listing_id: listing.id,
+                user_id: req.appUser.id,
+                rating,
+                comment: nextComment || null,
+            },
         });
 
-        return res.status(201).json(review);
+        if (!created) {
+            await review.update({
+                rating,
+                comment: nextComment || null,
+            });
+        }
+
+        return res.status(created ? 201 : 200).json({
+            ...review.toJSON(),
+            created,
+            message: created
+                ? 'Review created successfully'
+                : 'Your existing review was updated',
+        });
     } catch (err) {
         console.error('service_listings#reviews_create error:', err);
         return res.status(422).json({ errors: err.message });
